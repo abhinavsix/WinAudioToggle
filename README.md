@@ -116,6 +116,13 @@ Update-Icon
 For the script to work you must download 2 icons of your choice (showing which source is in use). You can use [this website](https://icon-icons.com/) to download the files in the `.ico`-fileformat.
 Place those files in the same directory as the script.
 
+The names of these files must also match the names in the script. Look for these lines in the script:
+
+$iconPath1 = Join-Path $scriptDir "icon1.ico"
+$iconPath2 = Join-Path $scriptDir "icon2.ico"
+
+Again:
+
 If you didn't already, you also must install the [AudioDeviceCmdlets](https://github.com/frgnca/AudioDeviceCmdlets) suite for the script to work. To do so paste the following script as administrator in a powershell window:
 ```bash
 Install-Module -Name AudioDeviceCmdlets
