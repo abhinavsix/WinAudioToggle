@@ -50,7 +50,14 @@ Update-Icon
 ### Requirements
 
 For the script to work you must download 2 icons of your choice (showing whether the microphone is muted or not). You can use [this website](https://icon-icons.com/) to download the files in the `.ico`-fileformat.
-Place those files in the same directory as the script.
+Place those files in the same directory as the script. 
+
+The names of these files must also match the names in the script. Look for these lines in the script:
+
+$iconPathOn = Join-Path $scriptDir "mic-on.ico"
+$iconPathOff = Join-Path $scriptDir "mic-off.ico"
+
+Next:
 
 You also must install the [AudioDeviceCmdlets](https://github.com/frgnca/AudioDeviceCmdlets) suite for the script to work. To do so paste the following script as administrator in a powershell window:
 ```bash
