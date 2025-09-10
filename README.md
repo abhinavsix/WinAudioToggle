@@ -72,14 +72,18 @@ For the script to work you must download 2 icons of your choice (showing whether
 
 I've also included those two icon files in the download. They are named mic-on.ico and mic-off.ico. These .ico files are basically images that windows can use instead of the standard windows shortcut image.
 
+
+<img width="210" height="140" alt="Miconandmicoff" src="https://github.com/user-attachments/assets/f06ae09a-85fb-44fb-9fe3-c0914a89c3cc" />
+
+
 Place those files in the same directory as the script. 
 
 The names of these files must also match the names in the script. Look for these lines in the script:
 
-```
+
 $iconPathOn = Join-Path $scriptDir "mic-on.ico"
 $iconPathOff = Join-Path $scriptDir "mic-off.ico"
-```
+
 
 #### Next:
 
@@ -147,6 +151,8 @@ Place those files in the same directory as the script.
 
 The names of these files must also match the names in the script. Look for these lines in the script:
 
+<img width="200" height="121" alt="Icons1and2" src="https://github.com/user-attachments/assets/cb22647f-bb78-4dfe-b6b8-d8d0cbf3f540" />
+
 $iconPath1 = Join-Path $scriptDir "icon1.ico"
 $iconPath2 = Join-Path $scriptDir "icon2.ico"
 
@@ -160,14 +166,30 @@ Install-Module -Name AudioDeviceCmdlets
 
  Creating Shortcuts & Autostart
  1. Right-click on your Desktop → New → Shortcut.
+
+<img width="701" height="545" alt="Makeshortcut" src="https://github.com/user-attachments/assets/a6358493-630d-4ccc-a187-3737b0feb733" />
+
+
  2. Enter this as the location (adjust path to your script location):
  3. powershell.exe -NoLogo -WindowStyle Hidden -ExecutionPolicy Bypass -File
  "C:\Path\To\MicTray.ps1"
- 4. Click Next, give it a name (e.g., 'Mic Tray'), and Finish.
- 5. Repeat the same for `AudioOutputTray.ps1`.
- 6. To autostart, press `Win + R`, type `shell:startup`, and drag the shortcut into the Startup folder
 
+<img width="795" height="515" alt="makeshortcutwithpath" src="https://github.com/user-attachments/assets/aeba0a5e-3971-4abe-9be3-9de8fbfce897" />
+
+
+ 5. Click Next, give it a name (e.g., 'Mic Tray'), and Finish.
+ 6. Repeat the same for `AudioOutputTray.ps1`.
+ 7. To autostart, press `Win + R`, type `shell:startup`, and drag the shortcut into the Startup folder
+
+<img width="403" height="206" alt="Shellstartupcmd" src="https://github.com/user-attachments/assets/2344a4d3-5a90-49ff-bfb0-cd8e61a25e33" />
+
+
+<img width="998" height="233" alt="Autostartfolder" src="https://github.com/user-attachments/assets/95b7ec49-eb8e-4c75-8e91-6896a6afba87" />
 
  ##### Hide Powershell Window on Startup
  1. Right click on the shortcuts you created in previous steps.
  2. Change the execute in window mode to minimized
+
+<img width="404" height="523" alt="Windowminimized" src="https://github.com/user-attachments/assets/e9ed7f64-37c3-4115-a305-ebc8418120ea" />
+
+Good luck. Hope it works. Just so you know, powershell will be running in the background. No promises that this will work well or that I will update this if it breaks. 
