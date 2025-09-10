@@ -148,7 +148,7 @@ Install-Module -Name AudioDeviceCmdlets
 
  Creating Shortcuts & Autostart
  1. Right-click on your Desktop → New → Shortcut.
- 2. Enter this as the location (adjust path to your script):
+ 2. Enter this as the location (adjust path to your script location):
  3. powershell.exe -NoLogo -WindowStyle Hidden -ExecutionPolicy Bypass -File
  "C:\Path\To\MicTray.ps1"
  4. Click Next, give it a name (e.g., 'Mic Tray'), and Finish.
