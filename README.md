@@ -1,8 +1,10 @@
 # Audio Tray Tools - Full Setup Guide
 
+I did not create this all by myself. Most of the credit should go to the creators of [AudioDeviceCmdlets](https://github.com/frgnca/AudioDeviceCmdlets).
+
+Big thanks to PSum for setting up the githubrepo and creating the instructional guide. 
+
 This guide explains how to set up two PowerShell tray utilities:
-
-
 
 
 1. **Microphone Tray Tool** – shows mic status (muted/unmuted) in the system tray and lets you toggle mute with a left click.
@@ -25,6 +27,8 @@ This guide explains how to set up two PowerShell tray utilities:
 ### Save the script
 
 Save the following script into a folder of your choice (e.g. `C:\Users\YourName\Tools\AudioTray`)
+
+You can do this by creating a text file (.txt) and copy and pasting this code into that file. Then name the file as you wish, but change the extension to .ps1 instead of .txt
 
 ```ps1
 # MicTray.ps1
@@ -65,6 +69,9 @@ Update-Icon
 ### Requirements
 
 For the script to work you must download 2 icons of your choice (showing whether the microphone is muted or not). You can use [this website](https://icon-icons.com/) to download the files in the `.ico`-fileformat.
+
+I've also included those two icon files in the download. They are named mic-on.ico and mic-off.ico. These .ico files are basically images that windows can use instead of the standard windows shortcut image.
+
 Place those files in the same directory as the script. 
 
 The names of these files must also match the names in the script. Look for these lines in the script:
@@ -90,6 +97,8 @@ Run the script by right-clicking it and pressing `run with powershell`. Now the 
 ### Save the script
 
 Save the following script into a folder of your choice (e.g. `C:\Users\YourName\Tools\AudioTray`)
+
+You can do this by creating a text file (.txt) and copy and pasting this code into that file. Then name the file as you wish, but change the extension to .ps1 instead of .txt
 
 ```ps1
 # AudioOutputTray.ps1
@@ -131,6 +140,9 @@ Update-Icon
 ### Requirements
 
 For the script to work you must download 2 icons of your choice (showing which source is in use). You can use [this website](https://icon-icons.com/) to download the files in the `.ico`-fileformat.
+
+I've also included those two icon files in the download. They are called icon1.ico and icon2.ico. (real creative I know...) These .ico files are basically images that windows can use instead of the standard windows shortcut image.
+
 Place those files in the same directory as the script.
 
 The names of these files must also match the names in the script. Look for these lines in the script:
