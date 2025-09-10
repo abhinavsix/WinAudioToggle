@@ -2,7 +2,7 @@
 
 I did not create this all by myself. Most of the credit should go to the creators of [AudioDeviceCmdlets](https://github.com/frgnca/AudioDeviceCmdlets).
 
-Big thanks to PSum for setting up the githubrepo and creating the instructional guide. 
+Big thanks to PSum for setting up the githubrepo and creating the instructional guide. Some of the images are in german, but du schaffst es schon!
 
 This guide explains how to set up two PowerShell tray utilities:
 
