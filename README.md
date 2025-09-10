@@ -2,8 +2,15 @@
 
 This guide explains how to set up two PowerShell tray utilities:
 
+
+
+
 1. **Microphone Tray Tool** – shows mic status (muted/unmuted) in the system tray and lets you toggle mute with a left click.
 2. **Audio Output Tray Tool** – shows the current playback device in the tray and lets you switch between outputs with a left click. Both scripts use **AudioDeviceCmdlets** and rely on `.ico` icon files provided alongside the scripts
+
+   
+<img width="594" height="107" alt="Speaker" src="https://github.com/user-attachments/assets/271a4f96-952b-41d9-ae67-d3ca3aa3a8b8" />
+<img width="526" height="109" alt="Speaker2" src="https://github.com/user-attachments/assets/b1903fb5-2432-4b86-9258-f380e480ba2d" />
 
 ## Microphone Tray Tool
 
