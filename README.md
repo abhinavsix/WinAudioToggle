@@ -83,7 +83,7 @@ Install-Module -Name AudioDeviceCmdlets
 
 ### Execution
 
-Run the script by righ-clicking it and pressing `run with powershell`. Now the icon showing the microphone status should appear in you tool tray. Toggle your mics state by clicking the icon.
+Run the script by right-clicking it and pressing `run with powershell`. Now the icon showing the microphone status should appear in you tool tray. Toggle your mics state by clicking the icon.
 
 ## Audio Output Tray Tool
 
@@ -144,3 +144,18 @@ If you didn't already, you also must install the [AudioDeviceCmdlets](https://gi
 ```bash
 Install-Module -Name AudioDeviceCmdlets
 ```
+#### Auto Running these Scripts on startup:
+
+ Creating Shortcuts & Autostart
+ 1 Right-click on your Desktop → New → Shortcut.
+ 2 Enter this as the location (adjust path to your script):
+ 3 powershell.exe -NoLogo -WindowStyle Hidden -ExecutionPolicy Bypass -File
+ "C:\Path\To\MicTray.ps1"
+ 4 Click Next, give it a name (e.g., 'Mic Tray'), and Finish.
+ 5 Repeat the same for `AudioOutputTray.ps1`.
+ 6 To autostart, press `Win + R`, type `shell:startup`, and drag the shortcut into the Startup folder
+
+
+ ##### Hide Powershell Window on Startup
+ 1. Right click on the shortcuts you created in previous steps.
+ 2. Change the execute in window mode to minimized
