@@ -1,0 +1,16 @@
+# Rename this file to outputs.txt to use it.
+#
+# Switch-Output.ps1 normally cycles through every active output device, which
+# on a docked laptop can mean five entries you never want. List the ones you
+# actually use here, one name fragment per line, in the order you want them
+# cycled. Matching is case-insensitive and partial, so "Headset" matches
+# "Headset Earphone (WH-1000XM4 Hands-Free AG Audio)".
+#
+# Names that do not match anything plugged in right now are skipped, so the
+# same file works docked and undocked. If fewer than two lines match, the
+# script falls back to cycling everything.
+#
+# Run  .\Switch-Output.ps1 -List  to see the exact names Windows reports.
+
+Headset
+Speakers
