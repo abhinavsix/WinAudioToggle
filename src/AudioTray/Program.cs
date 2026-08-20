@@ -12,6 +12,23 @@ namespace AudioTray
         [STAThread]
         static int Main(string[] args)
         {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            // Ahead of the single-instance check on purpose. The report is
+            // read-only, and it is wanted precisely when the tray is already
+            // running - taking the mutex first would answer "already running"
+            // at the one moment the report is being asked for.
+            if (HasFlag(args, "--diagnose"))
+            {
+                string report = Diagnostics.Build();
+                string savedTo = Diagnostics.Save(report);
+                if (savedTo != null) { report += Environment.NewLine + "Saved to: " + savedTo; }
+                MessageBox.Show(report, AppInfo.Title + " diagnostics",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return 0;
+            }
+
             // Local\ rather than Global\: one instance per signed-in user, so
             // two people on the same PC each get their own tray icons.
             bool createdNew;
@@ -25,9 +42,6 @@ namespace AudioTray
                 }
 
                 int poll = ReadPollInterval(args);
-
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
 
                 try
                 {
@@ -51,6 +65,15 @@ namespace AudioTray
             }
 
             return 0;
+        }
+
+        static bool HasFlag(string[] args, string flag)
+        {
+            foreach (string arg in args)
+            {
+                if (arg.Equals(flag, StringComparison.OrdinalIgnoreCase)) { return true; }
+            }
+            return false;
         }
 
         /// <summary>Accepts "--poll 500"; anything unparseable falls back to the default.</summary>

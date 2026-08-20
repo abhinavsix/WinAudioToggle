@@ -194,7 +194,40 @@ namespace AudioTray
             }
             catch (Exception error)
             {
-                Notify(_outIcon, error.Message);
+                NotifySwitchFailure(error);
+            }
+        }
+
+        /// <summary>
+        /// A refused switch is the one failure worth explaining properly:
+        /// PolicyConfig is undocumented, so a balloon alone leaves nothing to
+        /// act on. Point at the report that carries the actual status codes.
+        /// </summary>
+        void NotifySwitchFailure(Exception error)
+        {
+            Notify(_outIcon, error.Message
+                   + "  (right-click this icon and choose Diagnostics for details)");
+        }
+
+        void ShowDiagnostics()
+        {
+            try
+            {
+                string report = Diagnostics.Build();
+                string savedTo = Diagnostics.Save(report);
+
+                string body = report;
+                if (savedTo != null) { body += Environment.NewLine + "Saved to: " + savedTo; }
+
+                // Ctrl+C on a MessageBox copies its text, which makes this easy
+                // to paste somewhere useful.
+                MessageBox.Show(body, AppInfo.Title + " diagnostics",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception failure)
+            {
+                MessageBox.Show("Could not build the report: " + failure.Message,
+                                AppInfo.Title, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -207,7 +240,7 @@ namespace AudioTray
             }
             catch (Exception error)
             {
-                Notify(icon, error.Message);
+                NotifySwitchFailure(error);
             }
         }
 
@@ -315,6 +348,10 @@ namespace AudioTray
                 catch (Exception error) { Notify(_outIcon, error.Message); }
             };
             _outMenu.Items.Add(sound);
+
+            ToolStripMenuItem diagnostics = new ToolStripMenuItem("Diagnostics...");
+            diagnostics.Click += delegate { ShowDiagnostics(); };
+            _outMenu.Items.Add(diagnostics);
 
             ToolStripMenuItem autoStart = new ToolStripMenuItem("Start with Windows");
             autoStart.Checked = AutoStart.IsEnabled;

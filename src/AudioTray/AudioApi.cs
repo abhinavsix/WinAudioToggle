@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 namespace AudioTray
@@ -373,41 +374,100 @@ namespace AudioTray
             try { client = new PolicyConfigClientComObject(); }
             catch { return null; }
 
-            if (client as IPolicyConfig != null) { return "IPolicyConfig"; }
-            if (client as IPolicyConfigVista != null) { return "IPolicyConfigVista"; }
-            return null;
+            string flavours = "";
+            if (client as IPolicyConfig != null) { flavours += "IPolicyConfig "; }
+            if (client as IPolicyConfigVista != null) { flavours += "IPolicyConfigVista "; }
+            return flavours.Length == 0 ? null : flavours.Trim();
         }
+
+        static readonly ERole[] AllRoles =
+            new[] { ERole.eConsole, ERole.eMultimedia, ERole.eCommunications };
 
         public static void SetDefaultDevice(string deviceId)
         {
-            object client = new PolicyConfigClientComObject();
-            ERole[] roles = new[] { ERole.eConsole, ERole.eMultimedia, ERole.eCommunications };
+            string report;
+            if (TrySetDefaultDevice(deviceId, out report)) { return; }
+            throw new InvalidOperationException("Could not change the default audio device. " + report);
+        }
 
-            IPolicyConfig modern = client as IPolicyConfig;
-            if (modern != null)
+        /// <summary>
+        /// Applies a device as the default for every role, across whichever
+        /// PolicyConfig interface this build of Windows answers to.
+        ///
+        /// Every role is attempted rather than stopping at the first failure:
+        /// the roles are independent, and a machine that refuses one can still
+        /// accept another. Succeeding on any of them counts, because a single
+        /// applied role is the difference between the switch working and not.
+        ///
+        /// The report carries the exact HRESULTs. Without them a failure here
+        /// is undiagnosable - PolicyConfig is undocumented, so the status code
+        /// is the only evidence available.
+        /// </summary>
+        public static bool TrySetDefaultDevice(string deviceId, out string report)
+        {
+            StringBuilder log = new StringBuilder();
+            object client;
+
+            try
             {
-                int hr = modern.SetDefaultEndpoint(deviceId, roles[0]);
-                if (hr == 0)
-                {
-                    for (int i = 1; i < roles.Length; i++) { modern.SetDefaultEndpoint(deviceId, roles[i]); }
-                    return;
-                }
+                client = new PolicyConfigClientComObject();
+            }
+            catch (Exception error)
+            {
+                report = "PolicyConfig could not be created: " + error.Message;
+                return false;
             }
 
-            IPolicyConfigVista legacy = client as IPolicyConfigVista;
-            if (legacy != null)
+            if (Apply(client as IPolicyConfig, deviceId, log) ||
+                Apply(client as IPolicyConfigVista, deviceId, log))
             {
-                int hr = legacy.SetDefaultEndpoint(deviceId, roles[0]);
-                if (hr == 0)
-                {
-                    for (int i = 1; i < roles.Length; i++) { legacy.SetDefaultEndpoint(deviceId, roles[i]); }
-                    return;
-                }
-                Marshal.ThrowExceptionForHR(hr);
+                report = log.ToString().Trim();
+                return true;
             }
 
-            throw new InvalidOperationException(
-                "Windows refused to change the default audio device on this machine.");
+            report = log.ToString().Trim();
+            if (report.Length == 0) { report = "No PolicyConfig interface is available on this build of Windows."; }
+            return false;
+        }
+
+        static bool Apply(IPolicyConfig target, string deviceId, StringBuilder log)
+        {
+            if (target == null) { log.Append("IPolicyConfig unsupported. "); return false; }
+
+            bool any = false;
+            foreach (ERole role in AllRoles)
+            {
+                try
+                {
+                    int hr = target.SetDefaultEndpoint(deviceId, role);
+                    if (hr == 0) { any = true; } else { log.AppendFormat("IPolicyConfig/{0}=0x{1:X8} ", role, hr); }
+                }
+                catch (Exception error)
+                {
+                    log.AppendFormat("IPolicyConfig/{0} threw {1} ", role, error.GetType().Name);
+                }
+            }
+            return any;
+        }
+
+        static bool Apply(IPolicyConfigVista target, string deviceId, StringBuilder log)
+        {
+            if (target == null) { log.Append("IPolicyConfigVista unsupported. "); return false; }
+
+            bool any = false;
+            foreach (ERole role in AllRoles)
+            {
+                try
+                {
+                    int hr = target.SetDefaultEndpoint(deviceId, role);
+                    if (hr == 0) { any = true; } else { log.AppendFormat("Vista/{0}=0x{1:X8} ", role, hr); }
+                }
+                catch (Exception error)
+                {
+                    log.AppendFormat("Vista/{0} threw {1} ", role, error.GetType().Name);
+                }
+            }
+            return any;
         }
     }
 
