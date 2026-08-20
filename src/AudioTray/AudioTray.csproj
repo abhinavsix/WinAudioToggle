@@ -31,18 +31,6 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
-  <!--
-    Embedded so the executable stands alone. A same-named .ico placed beside
-    the .exe still takes priority at runtime, so icons remain swappable without
-    a rebuild.
-  -->
-  <ItemGroup>
-    <EmbeddedResource Include="..\..\mic-on.ico"  LogicalName="AudioTray.mic-on.ico" />
-    <EmbeddedResource Include="..\..\mic-off.ico" LogicalName="AudioTray.mic-off.ico" />
-    <EmbeddedResource Include="..\..\icon1.ico"   LogicalName="AudioTray.icon1.ico" />
-    <EmbeddedResource Include="..\..\icon2.ico"   LogicalName="AudioTray.icon2.ico" />
-  </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
       <PrivateAssets>all</PrivateAssets>

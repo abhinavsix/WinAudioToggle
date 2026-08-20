@@ -50,16 +50,11 @@ for required in "$CSC" "$REF/mscorlib.dll"; do
     [ -f "$required" ] || { echo "missing: $required" >&2; exit 1; }
 done
 
-# The icons are embedded so the executable stands alone. A same-named .ico
-# placed beside the .exe still wins at runtime, so they stay swappable.
-RESOURCES=()
-for name in mic-on mic-off icon1 icon2; do
-    if [ -f "$ROOT/$name.ico" ]; then
-        RESOURCES+=("-resource:$ROOT/$name.ico,AudioTray.$name.ico")
-    else
-        echo "  warning: $name.ico not found; the built-in fallback icon will be used" >&2
-    fi
-done
+# No icons are embedded: the tray icons are drawn at runtime so they follow
+# the Windows theme and stay legible on a dark or a light taskbar, which a
+# fixed bitmap cannot do. mic-on.ico / mic-off.ico beside the .exe still
+# override the microphone glyph, and output icons are chosen per device in
+# the favourites dialog. The .ico below is only the file icon Explorer shows.
 
 echo "Compiling..."
 mono "$CSC" \
@@ -74,7 +69,6 @@ mono "$CSC" \
     -r:"$REF/System.Core.dll" \
     -r:"$REF/System.Drawing.dll" \
     -r:"$REF/System.Windows.Forms.dll" \
-    "${RESOURCES[@]}" \
     "$SRC"/*.cs
 
 echo

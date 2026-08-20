@@ -97,16 +97,42 @@ Everything else still works when this fails — mic mute, device monitoring, the
 - **If you switch between a Bluetooth headset and speakers**, use the **Bluetooth** submenu instead. Connecting and disconnecting goes through a completely different Windows API that does not involve PolicyConfig at all, and Windows moves the default output on its own when a headset connects or drops. For that particular swap it does the same job.
 - **Otherwise** use **Windows sound settings...** in the same menu, or **Win+Ctrl+V** for the volume mixer's output picker.
 
+### Favourite outputs and icons
+
+Right-click the output icon and choose **Favourite outputs & icons...**
+
+Tick the outputs you actually swap between, put them in the order you want to cycle, and give each one an icon so you can tell at a glance which is active. `.ico`, `.png`, `.bmp`, `.jpg` and `.gif` all work.
+
+Only ticked devices are cycled, so the four HDMI and virtual-cable endpoints a docked laptop exposes stay out of the way. Tick nothing and it cycles everything.
+
+The list is saved as plain text in `favorites.txt` beside the executable, so it can be edited by hand or copied between machines:
+
+```
+Kopfhörer = C:\icons\headset.png
+Lautsprecher
+```
+
+Names are matched as a case-insensitive substring, so a fragment is enough, and anything not plugged in right now is skipped — one file works docked and undocked. An `outputs.txt` from an earlier version is still read if no `favorites.txt` exists.
+
+### About the icons
+
+The tray icons are **drawn at runtime rather than loaded from image files**, for one reason: a fixed image cannot be legible on both a dark and a light taskbar. The ink colour follows your Windows theme and changes with it while running, and the glyph is rendered at whatever size the shell asks for instead of being scaled down from a fixed bitmap.
+
+The output glyph is guessed from the device name — headphones for anything reading as a headset (including German *Kopfhörer*), a speaker otherwise — so the two devices you swap between usually look different without configuring anything. Set an icon in the favourites dialog to override.
+
+For the microphone, a `mic-on.ico` and `mic-off.ico` placed beside the executable override the drawn glyph.
+
 ### Options
 
 | | |
 |---|---|
 | `AudioTray.exe` | Normal launch. |
 | `AudioTray.exe --poll 500` | Poll the audio state every 500 ms instead of 1000. Accepts 250–10000. |
-| `outputs.txt` beside the .exe | Narrows which outputs get cycled. Same format as below. |
-| `mic-on.ico` etc. beside the .exe | Overrides the built-in icons without rebuilding. |
+| `AudioTray.exe --diagnose` | Print the diagnostics report and exit. |
+| `favorites.txt` beside the .exe | The cycle list and per-device icons. |
+| `mic-on.ico` / `mic-off.ico` beside the .exe | Override the microphone glyph. |
 
-Everything else works exactly as described in the next section — same icons, same clicks, same menus, same Bluetooth submenu.
+Everything else works as described in the next section — same clicks, same menus, same Bluetooth submenu.
 
 ---
 

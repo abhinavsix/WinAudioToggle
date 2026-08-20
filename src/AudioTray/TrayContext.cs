@@ -26,13 +26,13 @@ namespace AudioTray
 
         public TrayContext(int pollMilliseconds)
         {
-            _micIcon.Icon = IconLoader.Get("mic-on");
+            _micIcon.Icon = IconFactory.Microphone(false);
             _micIcon.Text = "Microphone";
             _micIcon.ContextMenuStrip = _micMenu;
             _micIcon.Visible = true;
             _micIcon.MouseClick += OnMicClick;
 
-            _outIcon.Icon = IconLoader.Get("icon1");
+            _outIcon.Icon = IconFactory.Output("", null);
             _outIcon.Text = "Audio output";
             _outIcon.ContextMenuStrip = _outMenu;
             _outIcon.Visible = true;
@@ -75,7 +75,7 @@ namespace AudioTray
             {
                 if (_shownMicMuted != status.InputMuted)
                 {
-                    _micIcon.Icon = IconLoader.Get(status.InputMuted ? "mic-off" : "mic-on");
+                    _micIcon.Icon = IconFactory.Microphone(status.InputMuted);
                 }
                 if (_shownMicId != status.InputId || _shownMicMuted != status.InputMuted)
                 {
@@ -86,7 +86,7 @@ namespace AudioTray
             }
             else if (_shownMicId != "<none>")
             {
-                _micIcon.Icon = IconLoader.Get("mic-off");
+                _micIcon.Icon = IconFactory.Microphone(true);
                 SetTooltip(_micIcon, "No microphone connected");
                 _shownMicId = "<none>";
                 _shownMicMuted = null;
@@ -96,7 +96,8 @@ namespace AudioTray
             {
                 if (_shownOutId != status.OutputId)
                 {
-                    _outIcon.Icon = IconLoader.Get(OutputIconName(status.OutputId));
+                    _outIcon.Icon = IconFactory.Output(status.OutputName,
+                                                       Favorites.IconFor(status.OutputName));
                     SetTooltip(_outIcon, "Output: " + status.OutputName);
                     _shownOutId = status.OutputId;
                 }
@@ -106,25 +107,6 @@ namespace AudioTray
                 SetTooltip(_outIcon, "No audio output connected");
                 _shownOutId = "<none>";
             }
-        }
-
-        /// <summary>
-        /// Alternates along the cycle order so the two devices actually being
-        /// swapped between look different at a glance.
-        /// </summary>
-        string OutputIconName(string outputId)
-        {
-            try
-            {
-                AudioDevice[] rotation = AppInfo.GetRotation(Audio.ListDevices(false));
-                for (int i = 0; i < rotation.Length; i++)
-                {
-                    if (rotation[i].Id == outputId) { return (i % 2 == 1) ? "icon2" : "icon1"; }
-                }
-            }
-            catch (Exception) { }
-
-            return "icon1";
         }
 
         void Notify(NotifyIcon icon, string message)
@@ -178,7 +160,7 @@ namespace AudioTray
                     return;
                 }
 
-                AudioDevice[] rotation = AppInfo.GetRotation(devices);
+                AudioDevice[] rotation = Favorites.Rotation(devices);
 
                 int current = -1;
                 for (int i = 0; i < rotation.Length; i++)
@@ -207,6 +189,40 @@ namespace AudioTray
         {
             Notify(_outIcon, error.Message
                    + "  (right-click this icon and choose Diagnostics for details)");
+        }
+
+        void ShowFavorites()
+        {
+            try
+            {
+                using (FavoritesForm form = new FavoritesForm(Audio.ListDevices(false)))
+                {
+                    // The tray owns no window, so nothing would bring this to
+                    // the front on its own.
+                    form.TopMost = true;
+                    form.Shown += delegate { form.TopMost = false; form.Activate(); };
+
+                    if (form.ShowDialog() != DialogResult.OK) { return; }
+                }
+
+                RepaintEverything();
+            }
+            catch (Exception error)
+            {
+                MessageBox.Show("Could not open favourites: " + error.Message,
+                                AppInfo.Title, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>Forces both icons to be rebuilt on the next refresh.</summary>
+        void RepaintEverything()
+        {
+            IconFactory.Invalidate();
+            _shownOutId = null;
+            _shownMicId = null;
+            _shownMicMuted = null;
+
+            try { Refresh(); } catch (Exception) { }
         }
 
         void ShowDiagnostics()
@@ -298,7 +314,7 @@ namespace AudioTray
                 _micMenu.Items.Add(new ToolStripSeparator());
                 AddHeader(_micMenu.Items, "Input device");
 
-                foreach (AudioDevice device in AppInfo.GetRotation(Audio.ListDevices(true)))
+                foreach (AudioDevice device in Favorites.Rotation(Audio.ListDevices(true)))
                 {
                     ToolStripMenuItem item = new ToolStripMenuItem(device.Name);
                     item.Checked = device.IsDefault;
@@ -323,7 +339,7 @@ namespace AudioTray
             {
                 AddHeader(_outMenu.Items, "Output device");
 
-                foreach (AudioDevice device in AppInfo.GetRotation(Audio.ListDevices(false)))
+                foreach (AudioDevice device in Favorites.Rotation(Audio.ListDevices(false)))
                 {
                     ToolStripMenuItem item = new ToolStripMenuItem(device.Name);
                     item.Checked = device.IsDefault;
@@ -348,6 +364,10 @@ namespace AudioTray
                 catch (Exception error) { Notify(_outIcon, error.Message); }
             };
             _outMenu.Items.Add(sound);
+
+            ToolStripMenuItem favorites = new ToolStripMenuItem("Favourite outputs && icons...");
+            favorites.Click += delegate { ShowFavorites(); };
+            _outMenu.Items.Add(favorites);
 
             ToolStripMenuItem diagnostics = new ToolStripMenuItem("Diagnostics...");
             diagnostics.Click += delegate { ShowDiagnostics(); };
@@ -418,6 +438,9 @@ namespace AudioTray
                 _consecutiveFailures = 0;
                 _reportedFailure = false;
 
+                // A theme switch changes what colour the icons need to be.
+                if (IconFactory.RefreshTheme()) { RepaintEverything(); }
+
                 string bluetoothResult = Bluetooth.TakeResultMessage();
                 if (bluetoothResult != null)
                 {
@@ -456,7 +479,7 @@ namespace AudioTray
                 }
 
                 try { _micMenu.Dispose(); _outMenu.Dispose(); } catch (Exception) { }
-                IconLoader.Dispose();
+                    IconFactory.Dispose();
             }
 
             base.Dispose(disposing);
