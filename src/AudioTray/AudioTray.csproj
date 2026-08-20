@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    For rebuilding on Windows:   dotnet build src/AudioTray/AudioTray.csproj -c Release
+    The Linux build path used to produce the committed dist/AudioTray.exe is
+    in ../build.sh, which drives the same Roslyn compiler and the same .NET
+    Framework reference assemblies.
+
+    net48 is the target because it ships with Windows 10 1903+ and Windows 11,
+    so the executable needs no runtime installed next to it.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>AudioTray</RootNamespace>
+    <AssemblyName>AudioTray</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Optimize>true</Optimize>
+    <ApplicationIcon>..\..\mic-on.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <!-- Lets the project build on a non-Windows host too. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <!--
+    Embedded so the executable stands alone. A same-named .ico placed beside
+    the .exe still takes priority at runtime, so icons remain swappable without
+    a rebuild.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\mic-on.ico"  LogicalName="AudioTray.mic-on.ico" />
+    <EmbeddedResource Include="..\..\mic-off.ico" LogicalName="AudioTray.mic-off.ico" />
+    <EmbeddedResource Include="..\..\icon1.ico"   LogicalName="AudioTray.icon1.ico" />
+    <EmbeddedResource Include="..\..\icon2.ico"   LogicalName="AudioTray.icon2.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

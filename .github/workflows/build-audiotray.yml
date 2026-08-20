@@ -1,0 +1,44 @@
+name: Build AudioTray.exe
+
+# Lets anyone rebuild the executable from source rather than taking the
+# committed dist/AudioTray.exe on trust. Every run uploads a fresh build as a
+# downloadable artifact.
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - '*.ico'
+      - '.github/workflows/build-audiotray.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - '*.ico'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build
+        run: dotnet build src/AudioTray/AudioTray.csproj -c Release -o dist-ci
+
+      - name: Show what was produced
+        shell: pwsh
+        run: |
+          Get-ChildItem dist-ci/AudioTray.exe |
+            Select-Object Name, Length, LastWriteTime |
+            Format-List
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AudioTray
+          path: dist-ci/AudioTray.exe
+          if-no-files-found: error

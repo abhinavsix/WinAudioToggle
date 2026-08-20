@@ -26,21 +26,24 @@ This guide explains how to set up two PowerShell tray utilities:
 
 # Which version should I use?
 
-There are three, and the right one depends on how locked down the machine is.
+**Most people want [`dist/AudioTray.exe`](dist).** Download, double-click, tick *Start with Windows*. Done.
 
-| | **Audio Tray** (`tray/`) | **Taskbar tools** (`taskbar/`) | Shortcuts only |
-|---|---|---|---|
-| Live tray icons | Yes | No, brief pop-up instead | No |
-| Background process | Yes, resident | No, ~1.5s per click | None |
-| Click to toggle | Yes | Yes | No, opens a panel |
-| Pick a device from a menu | Yes | Via `-Name` | Yes, in the panel |
-| Connect a paired Bluetooth device | Yes | No | Via Windows Settings |
-| Global hotkey | No | Yes | No |
-| Needs `Install-Module` | No | No | No |
-| Third-party code | None | None | None |
-| Works under AppLocker / WDAC | Usually not | Sometimes | Always |
+The rest exist for machines where that is not allowed.
 
-The original tray scripts at the bottom of this README are superseded by `tray/` — same idea, but without the AudioDeviceCmdlets dependency. They are kept for reference.
+| | **AudioTray.exe** | **Audio Tray** (`tray/`) | **Taskbar tools** (`taskbar/`) | Shortcuts only |
+|---|---|---|---|---|
+| Setup | Double-click | Run a script | Run an installer script | Run an installer script |
+| Live tray icons | Yes | Yes | No, brief pop-up | No |
+| Background process | Yes, resident | Yes, resident | No, ~1.5s per click | None |
+| Click to toggle | Yes | Yes | Yes | No, opens a panel |
+| Pick a device from a menu | Yes | Yes | Via `-Name` | Yes, in the panel |
+| Connect a paired Bluetooth device | Yes | Yes | No | Via Windows Settings |
+| Global hotkey | No | No | Yes | No |
+| Needs PowerShell to be permitted | No | Yes | Yes | No |
+| Third-party code | None | None | None | None |
+| Works under AppLocker / WDAC | Usually not | Usually not | Sometimes | Always |
+
+The .exe and the `tray/` script are the same tool built two ways — pick the .exe for convenience, the script if you would rather run something you can read. The original tray scripts at the bottom of this README are superseded by both; they are kept for reference.
 
 **On a work PC, start here:**
 
@@ -48,7 +51,7 @@ The original tray scripts at the bottom of this README are superseded by `tray/`
 powershell -NoProfile -ExecutionPolicy Bypass -File .\taskbar\Test-Compatibility.ps1
 ```
 
-That is read-only — it installs nothing and changes no device. It tells you which of the three columns above you can use, and why.
+That is read-only — it installs nothing and changes no device. It tells you which of the columns above you can use, and why.
 
 ## Why the original tools trip antivirus and corporate policy
 
@@ -63,9 +66,42 @@ Only the taskbar tools fix the second, by exiting after each action. **Audio Tra
 
 ---
 
-# Audio Tray
+# AudioTray.exe (easiest option)
 
-Live tray icons, in [`tray/`](tray). Two icons appear in the notification area and stay in step with whatever Windows is doing — including changes you make in the volume mixer, from a headset button, or by unplugging a dock.
+**[`dist/AudioTray.exe`](dist)** — one file, no PowerShell, no execution policy, no console window. Download it, put it anywhere, double-click.
+
+To start it with Windows, right-click the output icon and tick **Start with Windows**. That is all the setup there is.
+
+It needs .NET Framework 4.8, which is part of Windows 10 (1903 and later) and Windows 11 — so on any current Windows there is nothing to install.
+
+### First run: expect a SmartScreen warning
+
+The executable is not code-signed — signing certificates cost a few hundred a year — so the first launch shows **"Windows protected your PC"**. Click **More info → Run anyway**. If it was downloaded rather than built locally, you can clear the flag permanently: right-click the file → **Properties** → tick **Unblock** → OK.
+
+That warning is the honest cost of a plain binary. If you would rather not take a downloaded .exe on trust, don't — build it yourself:
+
+- **On Windows:** `dotnet build src/AudioTray/AudioTray.csproj -c Release`
+- **In CI:** the [build workflow](.github/workflows/build-audiotray.yml) compiles it on a clean GitHub runner and uploads the result as a downloadable artifact. Same source, build you can watch.
+- **On Linux:** `bash src/build.sh` (uses Microsoft's Roslyn compiler and .NET Framework reference assemblies from NuGet, with Mono only as a host)
+
+The full source is in [`src/AudioTray`](src/AudioTray) — the same Core Audio and Bluetooth code as the PowerShell version, roughly 1,300 lines.
+
+### Options
+
+| | |
+|---|---|
+| `AudioTray.exe` | Normal launch. |
+| `AudioTray.exe --poll 500` | Poll the audio state every 500 ms instead of 1000. Accepts 250–10000. |
+| `outputs.txt` beside the .exe | Narrows which outputs get cycled. Same format as below. |
+| `mic-on.ico` etc. beside the .exe | Overrides the built-in icons without rebuilding. |
+
+Everything else works exactly as described in the next section — same icons, same clicks, same menus, same Bluetooth submenu.
+
+---
+
+# Audio Tray (PowerShell version)
+
+The same tool as a script, in [`tray/`](tray). Use this if you would rather run something you can read and edit than a compiled binary. Two icons appear in the notification area and stay in step with whatever Windows is doing — including changes you make in the volume mixer, from a headset button, or by unplugging a dock.
 
 **Microphone icon**
 
