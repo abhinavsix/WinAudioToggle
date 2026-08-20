@@ -392,25 +392,58 @@ namespace WinAudioToggle
             return done.Count;
         }
 
-        /// <summary>
-        /// Read-only probe: reports which PolicyConfig interface this build of
-        /// Windows answers to, without changing any device. Returns null when
-        /// neither is available.
-        /// </summary>
-        public static string GetPolicyConfigFlavour()
-        {
-            object client;
-            try { client = new PolicyConfigClientComObject(); }
-            catch { return null; }
+        // ---- changing the default device --------------------------------
+        //
+        // Windows has never shipped a public API for this, so every audio
+        // switcher drives one of the shell's internal PolicyConfig interfaces.
+        // Which coclass and which interface answer varies by Windows build, so
+        // rather than assume one combination, all the known ones are tried and
+        // the exact status codes recorded.
+        //
+        // Activation context is part of the matrix on purpose. An out-of-process
+        // activation returns a proxy, and QueryInterface across a proxy needs
+        // the interface registered for marshalling - which these undocumented
+        // ones are not. In-process activation is therefore tried first, and a
+        // proxy is the leading explanation for a QueryInterface that fails
+        // against a coclass which itself created successfully.
 
-            string flavours = "";
-            if (client as IPolicyConfig != null) { flavours += "IPolicyConfig "; }
-            if (client as IPolicyConfigVista != null) { flavours += "IPolicyConfigVista "; }
-            return flavours.Length == 0 ? null : flavours.Trim();
+        static readonly Guid IID_IUnknown = new Guid("00000000-0000-0000-C000-000000000046");
+        static readonly Guid IID_IPolicyConfig = new Guid("f8679f50-850a-45de-be8b-c4348c9a0d0b");
+        static readonly Guid IID_IPolicyConfigVista = new Guid("568b9108-44bf-40b4-9006-86afe5b5a620");
+
+        const int CLSCTX_INPROC_SERVER = 0x1;
+        const int CLSCTX_SERVER = 0x15;
+
+        [DllImport("ole32.dll")]
+        static extern int CoCreateInstance(ref Guid rclsid, IntPtr outer, int context,
+                                           ref Guid riid, out IntPtr instance);
+
+        sealed class PolicySource
+        {
+            public string Name;
+            public Guid ClassId;
+            public int Context;
+            public string ContextName;
+        }
+
+        static PolicySource[] PolicySources()
+        {
+            Guid client = new Guid("870af99c-171d-4f9e-af0d-e63df40c2bc9");       // CPolicyConfigClient
+            Guid vistaClient = new Guid("294935ce-f637-4e7c-a41b-ab255460b862");  // CPolicyConfigVistaClient
+
+            return new[]
+            {
+                new PolicySource { Name = "Client",      ClassId = client,      Context = CLSCTX_INPROC_SERVER, ContextName = "inproc" },
+                new PolicySource { Name = "Client",      ClassId = client,      Context = CLSCTX_SERVER,        ContextName = "server" },
+                new PolicySource { Name = "VistaClient", ClassId = vistaClient, Context = CLSCTX_INPROC_SERVER, ContextName = "inproc" },
+                new PolicySource { Name = "VistaClient", ClassId = vistaClient, Context = CLSCTX_SERVER,        ContextName = "server" }
+            };
         }
 
         static readonly ERole[] AllRoles =
             new[] { ERole.eConsole, ERole.eMultimedia, ERole.eCommunications };
+
+        delegate int SetEndpoint(string deviceId, ERole role);
 
         public static void SetDefaultDevice(string deviceId)
         {
@@ -420,38 +453,47 @@ namespace WinAudioToggle
         }
 
         /// <summary>
-        /// Applies a device as the default for every role, across whichever
-        /// PolicyConfig interface this build of Windows answers to.
+        /// Walks every known coclass, activation context and interface until one
+        /// applies the device, then applies it for all three roles.
         ///
         /// Every role is attempted rather than stopping at the first failure:
-        /// the roles are independent, and a machine that refuses one can still
-        /// accept another. Succeeding on any of them counts, because a single
-        /// applied role is the difference between the switch working and not.
-        ///
-        /// The report carries the exact HRESULTs. Without them a failure here
-        /// is undiagnosable - PolicyConfig is undocumented, so the status code
-        /// is the only evidence available.
+        /// the roles are independent, and a build that refuses one can still
+        /// accept another. Any single success counts, since one applied role is
+        /// the difference between the switch working and not.
         /// </summary>
         public static bool TrySetDefaultDevice(string deviceId, out string report)
         {
             StringBuilder log = new StringBuilder();
-            object client;
 
-            try
+            foreach (PolicySource source in PolicySources())
             {
-                client = new PolicyConfigClientComObject();
-            }
-            catch (Exception error)
-            {
-                report = "PolicyConfig could not be created: " + error.Message;
-                return false;
-            }
+                IntPtr unknown = IntPtr.Zero;
+                try
+                {
+                    Guid classId = source.ClassId;
+                    Guid unknownId = IID_IUnknown;
 
-            if (Apply(client as IPolicyConfig, deviceId, log) ||
-                Apply(client as IPolicyConfigVista, deviceId, log))
-            {
-                report = log.ToString().Trim();
-                return true;
+                    int hr = CoCreateInstance(ref classId, IntPtr.Zero, source.Context, ref unknownId, out unknown);
+                    if (hr != 0 || unknown == IntPtr.Zero)
+                    {
+                        log.AppendFormat("{0}/{1} create=0x{2:X8}; ", source.Name, source.ContextName, hr);
+                        continue;
+                    }
+
+                    if (TryApply(unknown, source, deviceId, log))
+                    {
+                        report = log.ToString().Trim();
+                        return true;
+                    }
+                }
+                catch (Exception error)
+                {
+                    log.AppendFormat("{0}/{1} {2}; ", source.Name, source.ContextName, error.GetType().Name);
+                }
+                finally
+                {
+                    if (unknown != IntPtr.Zero) { Marshal.Release(unknown); }
+                }
             }
 
             report = log.ToString().Trim();
@@ -459,44 +501,126 @@ namespace WinAudioToggle
             return false;
         }
 
-        static bool Apply(IPolicyConfig target, string deviceId, StringBuilder log)
+        static bool TryApply(IntPtr unknown, PolicySource source, string deviceId, StringBuilder log)
         {
-            if (target == null) { log.Append("IPolicyConfig unsupported. "); return false; }
+            IntPtr pointer;
+            Guid iid = IID_IPolicyConfig;
 
+            int hr = Marshal.QueryInterface(unknown, ref iid, out pointer);
+            if (hr == 0)
+            {
+                try
+                {
+                    IPolicyConfig target =
+                        (IPolicyConfig)Marshal.GetTypedObjectForIUnknown(pointer, typeof(IPolicyConfig));
+                    if (ApplyRoles(deviceId, source, "IPolicyConfig", log,
+                                   delegate(string id, ERole role) { return target.SetDefaultEndpoint(id, role); }))
+                    {
+                        return true;
+                    }
+                }
+                finally { Marshal.Release(pointer); }
+            }
+            else
+            {
+                log.AppendFormat("{0}/{1} IPolicyConfig QI=0x{2:X8}; ", source.Name, source.ContextName, hr);
+            }
+
+            iid = IID_IPolicyConfigVista;
+            hr = Marshal.QueryInterface(unknown, ref iid, out pointer);
+            if (hr == 0)
+            {
+                try
+                {
+                    IPolicyConfigVista target =
+                        (IPolicyConfigVista)Marshal.GetTypedObjectForIUnknown(pointer, typeof(IPolicyConfigVista));
+                    if (ApplyRoles(deviceId, source, "Vista", log,
+                                   delegate(string id, ERole role) { return target.SetDefaultEndpoint(id, role); }))
+                    {
+                        return true;
+                    }
+                }
+                finally { Marshal.Release(pointer); }
+            }
+            else
+            {
+                log.AppendFormat("{0}/{1} Vista QI=0x{2:X8}; ", source.Name, source.ContextName, hr);
+            }
+
+            return false;
+        }
+
+        static bool ApplyRoles(string deviceId, PolicySource source, string interfaceName,
+                               StringBuilder log, SetEndpoint set)
+        {
             bool any = false;
+
             foreach (ERole role in AllRoles)
             {
                 try
                 {
-                    int hr = target.SetDefaultEndpoint(deviceId, role);
-                    if (hr == 0) { any = true; } else { log.AppendFormat("IPolicyConfig/{0}=0x{1:X8} ", role, hr); }
+                    int hr = set(deviceId, role);
+                    if (hr == 0) { any = true; }
+                    else { log.AppendFormat("{0}/{1}.{2}=0x{3:X8}; ", source.Name, interfaceName, role, hr); }
                 }
                 catch (Exception error)
                 {
-                    log.AppendFormat("IPolicyConfig/{0} threw {1} ", role, error.GetType().Name);
+                    log.AppendFormat("{0}/{1}.{2} threw {3}; ", source.Name, interfaceName, role, error.GetType().Name);
                 }
             }
+
             return any;
         }
 
-        static bool Apply(IPolicyConfigVista target, string deviceId, StringBuilder log)
+        /// <summary>
+        /// Read-only QueryInterface matrix, for diagnostics. Creates each
+        /// coclass and asks it for each interface without changing anything.
+        /// </summary>
+        public static string GetPolicyConfigFlavour()
         {
-            if (target == null) { log.Append("IPolicyConfigVista unsupported. "); return false; }
+            StringBuilder found = new StringBuilder();
 
-            bool any = false;
-            foreach (ERole role in AllRoles)
+            foreach (PolicySource source in PolicySources())
             {
+                IntPtr unknown = IntPtr.Zero;
                 try
                 {
-                    int hr = target.SetDefaultEndpoint(deviceId, role);
-                    if (hr == 0) { any = true; } else { log.AppendFormat("Vista/{0}=0x{1:X8} ", role, hr); }
+                    Guid classId = source.ClassId;
+                    Guid unknownId = IID_IUnknown;
+
+                    int hr = CoCreateInstance(ref classId, IntPtr.Zero, source.Context, ref unknownId, out unknown);
+                    if (hr != 0 || unknown == IntPtr.Zero)
+                    {
+                        found.AppendFormat("{0}/{1}: create=0x{2:X8};", source.Name, source.ContextName, hr);
+                        continue;
+                    }
+
+                    found.AppendFormat("{0}/{1}: created, {2} {3};",
+                                       source.Name, source.ContextName,
+                                       DescribeQuery(unknown, "IPolicyConfig", IID_IPolicyConfig),
+                                       DescribeQuery(unknown, "Vista", IID_IPolicyConfigVista));
                 }
                 catch (Exception error)
                 {
-                    log.AppendFormat("Vista/{0} threw {1} ", role, error.GetType().Name);
+                    found.AppendFormat("{0}/{1}: {2};", source.Name, source.ContextName, error.GetType().Name);
+                }
+                finally
+                {
+                    if (unknown != IntPtr.Zero) { Marshal.Release(unknown); }
                 }
             }
-            return any;
+
+            return found.ToString();
+        }
+
+        static string DescribeQuery(IntPtr unknown, string label, Guid interfaceId)
+        {
+            IntPtr pointer;
+            Guid iid = interfaceId;
+
+            int hr = Marshal.QueryInterface(unknown, ref iid, out pointer);
+            if (hr == 0) { Marshal.Release(pointer); return label + "=YES"; }
+            return string.Format("{0}=0x{1:X8}", label, hr);
         }
     }
 

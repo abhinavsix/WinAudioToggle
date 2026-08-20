@@ -86,6 +86,17 @@ That warning is the honest cost of a plain binary. If you would rather not take 
 
 The full source is in [`src/AudioTray`](src/AudioTray) — the same Core Audio and Bluetooth code as the PowerShell version, roughly 1,300 lines.
 
+### If switching outputs is refused
+
+Some Windows builds will not expose `IPolicyConfig`, the undocumented interface every audio switcher uses to change the default device. There is no public API for this, so when Windows declines there is no second official route. Left-clicking the output icon then reports "Could not change the default audio device".
+
+**Right-click the output icon → Diagnostics...** to see exactly which interfaces your build answers to. The report is also written to `AudioTray-diagnostics.txt` next to the executable.
+
+Everything else still works when this fails — mic mute, device monitoring, the tray icons, and Bluetooth. Two workarounds:
+
+- **If you switch between a Bluetooth headset and speakers**, use the **Bluetooth** submenu instead. Connecting and disconnecting goes through a completely different Windows API that does not involve PolicyConfig at all, and Windows moves the default output on its own when a headset connects or drops. For that particular swap it does the same job.
+- **Otherwise** use **Windows sound settings...** in the same menu, or **Win+Ctrl+V** for the volume mixer's output picker.
+
 ### Options
 
 | | |

@@ -62,7 +62,11 @@ namespace AudioTray
             try
             {
                 string flavours = Audio.GetPolicyConfigFlavour();
-                report.AppendLine("  Interfaces   : " + (flavours ?? "NONE - this is the problem"));
+                report.AppendLine("  QueryInterface matrix:");
+                foreach (string line in (flavours ?? "").Split(';'))
+                {
+                    if (line.Trim().Length > 0) { report.AppendLine("    " + line.Trim()); }
+                }
             }
             catch (Exception error)
             {
