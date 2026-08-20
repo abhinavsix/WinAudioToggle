@@ -103,17 +103,35 @@ foreach ($storeName in @('Root', 'TrustedPublisher')) {
 Write-Host ''
 Write-Host 'Signing scripts:'
 
+# Every folder that holds runnable code. lib\ matters as much as the rest:
+# under AllSigned an unsigned dot-sourced library fails just like an unsigned
+# script, and it is the one file every other script depends on.
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$folders = @(
+    (Join-Path $repoRoot 'lib')
+    (Join-Path $repoRoot 'taskbar')
+    (Join-Path $repoRoot 'tray')
+    $repoRoot
+) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -Unique
+
 $failed = 0
-foreach ($file in Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' | Sort-Object Name) {
-    $result = Set-AuthenticodeSignature -FilePath $file.FullName -Certificate $certificate `
-        -HashAlgorithm SHA256 -ErrorAction Continue
+$signed = 0
+foreach ($folder in $folders) {
+    foreach ($file in Get-ChildItem -LiteralPath $folder -Filter '*.ps1' | Sort-Object Name) {
+        $result = Set-AuthenticodeSignature -FilePath $file.FullName -Certificate $certificate `
+            -HashAlgorithm SHA256 -ErrorAction Continue
 
-    $colour = if ($result.Status -eq 'Valid') { 'Green' } else { 'Red' }
-    if ($result.Status -ne 'Valid') { $failed++ }
+        $colour = if ($result.Status -eq 'Valid') { 'Green' } else { 'Red' }
+        if ($result.Status -ne 'Valid') { $failed++ } else { $signed++ }
 
-    Write-Host "  $($file.Name.PadRight(26))" -NoNewline
-    Write-Host $result.Status -ForegroundColor $colour
+        $label = Join-Path (Split-Path -Leaf $folder) $file.Name
+        Write-Host "  $($label.PadRight(34))" -NoNewline
+        Write-Host $result.Status -ForegroundColor $colour
+    }
 }
+
+Write-Host ''
+Write-Host "$signed signed, $failed failed."
 
 Write-Host ''
 if ($failed -gt 0) {

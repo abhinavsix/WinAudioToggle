@@ -31,6 +31,7 @@ function Initialize-AudioTypes {
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace WinAudioToggle
 {
@@ -182,6 +183,21 @@ namespace WinAudioToggle
         public override string ToString() { return Name; }
     }
 
+    /// <summary>
+    /// Everything the tray icons poll for, gathered in one pass so the timer
+    /// costs three COM calls a second rather than a full device enumeration.
+    /// </summary>
+    public class AudioStatus
+    {
+        public string OutputId = "";
+        public string OutputName = "";
+        public bool HasOutput;
+        public string InputId = "";
+        public string InputName = "";
+        public bool HasInput;
+        public bool InputMuted;
+    }
+
     public static class Audio
     {
         const int CLSCTX_ALL = 23;
@@ -282,6 +298,35 @@ namespace WinAudioToggle
             IMMDevice device = GetDefaultDevice(flow, ERole.eMultimedia);
             if (device == null) { return null; }
             return new AudioDevice { Id = GetId(device), Name = GetFriendlyName(device), IsDefault = true };
+        }
+
+        public static AudioStatus GetStatus()
+        {
+            AudioStatus status = new AudioStatus();
+            IMMDeviceEnumerator enumerator = CreateEnumerator();
+
+            IMMDevice output;
+            if (enumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out output) == 0
+                && output != null)
+            {
+                status.HasOutput = true;
+                status.OutputId = GetId(output);
+                status.OutputName = GetFriendlyName(output);
+            }
+
+            IMMDevice input;
+            if (enumerator.GetDefaultAudioEndpoint(EDataFlow.eCapture, ERole.eMultimedia, out input) == 0
+                && input != null)
+            {
+                status.HasInput = true;
+                status.InputId = GetId(input);
+                status.InputName = GetFriendlyName(input);
+
+                bool muted;
+                if (GetEndpointVolume(input).GetMute(out muted) == 0) { status.InputMuted = muted; }
+            }
+
+            return status;
         }
 
         public static bool GetCaptureMute()
@@ -395,6 +440,320 @@ namespace WinAudioToggle
         }
     }
 
+    public class BluetoothAudioDevice
+    {
+        public string Name;
+        public ulong Address;
+        public string AddressText;
+        public bool Connected;
+        public bool IsAudio;
+        public override string ToString() { return Name; }
+    }
+
+    /// <summary>
+    /// Connects and disconnects already-paired Bluetooth devices through the
+    /// Win32 Bluetooth API. Pairing itself is deliberately out of scope - that
+    /// needs a trust prompt and belongs in the Windows Settings UI.
+    /// </summary>
+    public static class Bluetooth
+    {
+        const uint BLUETOOTH_SERVICE_DISABLE = 0;
+        const uint BLUETOOTH_SERVICE_ENABLE = 1;
+        const int ERROR_NOT_FOUND = 1168;
+
+        // Enabling A2DP is what actually brings a headset online; the
+        // hands-free service is what gives it a working microphone.
+        static readonly Guid[] AudioServices = new[]
+        {
+            new Guid("0000110B-0000-1000-8000-00805F9B34FB"), // A2DP audio sink
+            new Guid("0000111E-0000-1000-8000-00805F9B34FB")  // hands-free
+        };
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct SYSTEMTIME
+        {
+            public ushort wYear, wMonth, wDayOfWeek, wDay, wHour, wMinute, wSecond, wMilliseconds;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct BLUETOOTH_DEVICE_INFO
+        {
+            public int dwSize;
+            public ulong Address;
+            public uint ulClassofDevice;
+            [MarshalAs(UnmanagedType.Bool)] public bool fConnected;
+            [MarshalAs(UnmanagedType.Bool)] public bool fRemembered;
+            [MarshalAs(UnmanagedType.Bool)] public bool fAuthenticated;
+            public SYSTEMTIME stLastSeen;
+            public SYSTEMTIME stLastUsed;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 248)] public string szName;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct BLUETOOTH_DEVICE_SEARCH_PARAMS
+        {
+            public int dwSize;
+            [MarshalAs(UnmanagedType.Bool)] public bool fReturnAuthenticated;
+            [MarshalAs(UnmanagedType.Bool)] public bool fReturnRemembered;
+            [MarshalAs(UnmanagedType.Bool)] public bool fReturnUnknown;
+            [MarshalAs(UnmanagedType.Bool)] public bool fReturnConnected;
+            [MarshalAs(UnmanagedType.Bool)] public bool fIssueInquiry;
+            public byte cTimeoutMultiplier;
+            public IntPtr hRadio;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct BLUETOOTH_FIND_RADIO_PARAMS
+        {
+            public int dwSize;
+        }
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern IntPtr BluetoothFindFirstRadio(ref BLUETOOTH_FIND_RADIO_PARAMS pbtfrp, out IntPtr phRadio);
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothFindNextRadio(IntPtr hFind, out IntPtr phRadio);
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothFindRadioClose(IntPtr hFind);
+        [DllImport("bthprops.cpl", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern IntPtr BluetoothFindFirstDevice(ref BLUETOOTH_DEVICE_SEARCH_PARAMS pbtsp,
+                                                      ref BLUETOOTH_DEVICE_INFO pbtdi);
+        [DllImport("bthprops.cpl", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool BluetoothFindNextDevice(IntPtr hFind, ref BLUETOOTH_DEVICE_INFO pbtdi);
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothFindDeviceClose(IntPtr hFind);
+        [DllImport("bthprops.cpl", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int BluetoothGetDeviceInfo(IntPtr hRadio, ref BLUETOOTH_DEVICE_INFO pbtdi);
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern int BluetoothSetServiceState(IntPtr hRadio, ref BLUETOOTH_DEVICE_INFO pbtdi,
+                                                   ref Guid pGuidService, uint dwServiceFlags);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool CloseHandle(IntPtr hObject);
+
+        static List<IntPtr> OpenRadios()
+        {
+            List<IntPtr> radios = new List<IntPtr>();
+            BLUETOOTH_FIND_RADIO_PARAMS parameters = new BLUETOOTH_FIND_RADIO_PARAMS();
+            parameters.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_FIND_RADIO_PARAMS));
+
+            IntPtr radio;
+            IntPtr find = BluetoothFindFirstRadio(ref parameters, out radio);
+            if (find == IntPtr.Zero) { return radios; }
+
+            try
+            {
+                do { radios.Add(radio); } while (BluetoothFindNextRadio(find, out radio));
+            }
+            finally { BluetoothFindRadioClose(find); }
+
+            return radios;
+        }
+
+        static void CloseRadios(List<IntPtr> radios)
+        {
+            foreach (IntPtr radio in radios) { CloseHandle(radio); }
+        }
+
+        static string FormatAddress(ulong address)
+        {
+            byte[] bytes = BitConverter.GetBytes(address);
+            return string.Format("{0:X2}:{1:X2}:{2:X2}:{3:X2}:{4:X2}:{5:X2}",
+                                 bytes[5], bytes[4], bytes[3], bytes[2], bytes[1], bytes[0]);
+        }
+
+        /// <summary>Major device class 0x04 is Audio/Video.</summary>
+        static bool IsAudioClass(uint classOfDevice)
+        {
+            return ((classOfDevice >> 8) & 0x1F) == 0x04;
+        }
+
+        public static bool HasRadio()
+        {
+            List<IntPtr> radios = OpenRadios();
+            try { return radios.Count > 0; }
+            finally { CloseRadios(radios); }
+        }
+
+        public static BluetoothAudioDevice[] ListPaired(bool audioOnly)
+        {
+            Dictionary<ulong, BluetoothAudioDevice> found = new Dictionary<ulong, BluetoothAudioDevice>();
+            List<IntPtr> radios = OpenRadios();
+
+            try
+            {
+                foreach (IntPtr radio in radios)
+                {
+                    BLUETOOTH_DEVICE_SEARCH_PARAMS search = new BLUETOOTH_DEVICE_SEARCH_PARAMS();
+                    search.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_SEARCH_PARAMS));
+                    search.fReturnAuthenticated = true;
+                    search.fReturnRemembered = true;
+                    search.fReturnConnected = true;
+                    search.fReturnUnknown = false;
+                    search.fIssueInquiry = false;   // no scan: paired devices only, so this stays fast
+                    search.cTimeoutMultiplier = 0;
+                    search.hRadio = radio;
+
+                    BLUETOOTH_DEVICE_INFO info = new BLUETOOTH_DEVICE_INFO();
+                    info.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_INFO));
+
+                    IntPtr find = BluetoothFindFirstDevice(ref search, ref info);
+                    if (find == IntPtr.Zero) { continue; }
+
+                    try
+                    {
+                        while (true)
+                        {
+                            bool isAudio = IsAudioClass(info.ulClassofDevice);
+                            if ((!audioOnly || isAudio) && !found.ContainsKey(info.Address))
+                            {
+                                found[info.Address] = new BluetoothAudioDevice
+                                {
+                                    Name = string.IsNullOrEmpty(info.szName)
+                                           ? FormatAddress(info.Address) : info.szName,
+                                    Address = info.Address,
+                                    AddressText = FormatAddress(info.Address),
+                                    Connected = info.fConnected,
+                                    IsAudio = isAudio
+                                };
+                            }
+
+                            info.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_INFO));
+                            if (!BluetoothFindNextDevice(find, ref info)) { break; }
+                        }
+                    }
+                    finally { BluetoothFindDeviceClose(find); }
+                }
+            }
+            finally { CloseRadios(radios); }
+
+            List<BluetoothAudioDevice> devices = new List<BluetoothAudioDevice>(found.Values);
+            devices.Sort(delegate(BluetoothAudioDevice a, BluetoothAudioDevice b)
+            {
+                return string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase);
+            });
+            return devices.ToArray();
+        }
+
+        /// <summary>Blocks until the radio answers. Returns a Win32 error code, 0 on success.</summary>
+        public static int SetConnected(ulong address, bool connect)
+        {
+            uint flag = connect ? BLUETOOTH_SERVICE_ENABLE : BLUETOOTH_SERVICE_DISABLE;
+            int lastError = ERROR_NOT_FOUND;
+            List<IntPtr> radios = OpenRadios();
+
+            try
+            {
+                foreach (IntPtr radio in radios)
+                {
+                    BLUETOOTH_DEVICE_INFO info = new BLUETOOTH_DEVICE_INFO();
+                    info.dwSize = Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_INFO));
+                    info.Address = address;
+
+                    // Fails when this radio has never seen the device; try the next one.
+                    if (BluetoothGetDeviceInfo(radio, ref info) != 0) { continue; }
+
+                    bool any = false;
+                    foreach (Guid service in AudioServices)
+                    {
+                        Guid target = service;
+                        int result = BluetoothSetServiceState(radio, ref info, ref target, flag);
+                        if (result == 0) { any = true; } else { lastError = result; }
+                    }
+
+                    if (any) { return 0; }
+                }
+            }
+            finally { CloseRadios(radios); }
+
+            return lastError;
+        }
+
+        // Connecting can take the better part of ten seconds, which would
+        // freeze the tray. The work runs on a plain .NET thread and the result
+        // is picked up by the UI timer, so no callback ever has to cross back
+        // into PowerShell from a foreign thread.
+        static int _busy;
+        static readonly object _sync = new object();
+        static string _pendingName = "";
+        static bool _pendingConnect;
+        static bool _hasResult;
+        static int _result;
+
+        public static bool IsBusy { get { return Volatile.Read(ref _busy) != 0; } }
+
+        public static bool BeginSetConnected(ulong address, bool connect, string displayName)
+        {
+            if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0) { return false; }
+
+            lock (_sync)
+            {
+                _pendingName = displayName;
+                _pendingConnect = connect;
+                _hasResult = false;
+                _result = 0;
+            }
+
+            Thread worker = new Thread(delegate()
+            {
+                int outcome;
+                try { outcome = SetConnected(address, connect); }
+                catch (Exception) { outcome = -1; }
+
+                lock (_sync) { _result = outcome; _hasResult = true; }
+                Volatile.Write(ref _busy, 0);
+            });
+            worker.IsBackground = true;
+            worker.Start();
+            return true;
+        }
+
+        /// <summary>Returns a message once, then null until the next request.</summary>
+        public static string TakeResultMessage()
+        {
+            lock (_sync)
+            {
+                if (!_hasResult) { return null; }
+                _hasResult = false;
+
+                if (_result == 0)
+                {
+                    return (_pendingConnect ? "Connected to " : "Disconnected ") + _pendingName;
+                }
+                if (_result == ERROR_NOT_FOUND)
+                {
+                    return _pendingName + " did not respond. Is it powered on and in range?";
+                }
+                return (_pendingConnect ? "Could not connect to " : "Could not disconnect ")
+                       + _pendingName + " (error " + _result + ")";
+            }
+        }
+    }
+
+    public static class Native
+    {
+        [DllImport("kernel32.dll")] static extern IntPtr GetConsoleWindow();
+        [DllImport("kernel32.dll")] static extern uint GetConsoleProcessList(uint[] processList, uint count);
+        [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        const int SW_HIDE = 0;
+
+        /// <summary>
+        /// Hides the console window, but only when this process is the sole
+        /// owner of it. Launched from a shortcut that is true and the window is
+        /// just a flash of black; launched from an existing prompt it is the
+        /// user's own window, and hiding that would be rude.
+        /// </summary>
+        public static bool HideOwnConsole()
+        {
+            IntPtr window = GetConsoleWindow();
+            if (window == IntPtr.Zero) { return false; }
+
+            uint[] owners = new uint[4];
+            if (GetConsoleProcessList(owners, (uint)owners.Length) != 1) { return false; }
+
+            return ShowWindow(window, SW_HIDE);
+        }
+    }
+
     /// <summary>
     /// A borderless status pop-up that never takes focus, so toggling the mic
     /// mid-sentence does not steal your keystrokes.
@@ -467,6 +826,85 @@ function Set-DefaultAudioDevice {
 function Test-DefaultDeviceSupport {
     Initialize-AudioTypes
     [WinAudioToggle.Audio]::GetPolicyConfigFlavour()
+}
+
+function Get-AudioStatus {
+    # One pass over the defaults. Cheap enough to call on a one-second timer.
+    Initialize-AudioTypes
+    [WinAudioToggle.Audio]::GetStatus()
+}
+
+function Get-OutputRotation {
+    <#
+        Resolves outputs.txt into an ordered list of live devices, so the tray
+        and the one-shot switcher cycle in the same order.
+
+        Returns an empty array when there is no usable preference file, which
+        tells the caller to fall back to every active device by name.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$Devices,
+        [string]$ConfigDirectory
+    )
+
+    $candidates = @()
+    if ($ConfigDirectory) { $candidates += (Join-Path $ConfigDirectory 'outputs.txt') }
+    $repoRoot = Split-Path -Parent $PSScriptRoot
+    $candidates += (Join-Path $repoRoot 'outputs.txt')
+    $candidates += (Join-Path $repoRoot 'taskbar\outputs.txt')
+
+    $path = $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+    if (-not $path) { return @() }
+
+    $ordered = @()
+    foreach ($line in Get-Content -LiteralPath $path) {
+        $pattern = $line.Trim()
+        if (-not $pattern -or $pattern.StartsWith('#')) { continue }
+
+        $match = $Devices | Where-Object { $_.Name -like "*$pattern*" } | Select-Object -First 1
+        if ($match -and ($ordered -notcontains $match)) { $ordered += $match }
+    }
+
+    if ($ordered.Count -lt 2) { return @() }
+    return $ordered
+}
+
+function Get-PairedBluetoothDevice {
+    <#
+        Paired Bluetooth devices, audio ones first. Falls back to every paired
+        device when nothing reports the Audio/Video class, since a few headsets
+        describe themselves oddly and an empty menu is no help to anyone.
+    #>
+    Initialize-AudioTypes
+
+    $devices = @([WinAudioToggle.Bluetooth]::ListPaired($true))
+    if ($devices.Count -eq 0) { $devices = @([WinAudioToggle.Bluetooth]::ListPaired($false)) }
+    $devices
+}
+
+function Test-BluetoothRadio {
+    Initialize-AudioTypes
+    [WinAudioToggle.Bluetooth]::HasRadio()
+}
+
+function Start-BluetoothConnect {
+    param(
+        [Parameter(Mandatory = $true)][uint64]$Address,
+        [Parameter(Mandatory = $true)][bool]$Connect,
+        [Parameter(Mandatory = $true)][string]$DisplayName
+    )
+    Initialize-AudioTypes
+    [WinAudioToggle.Bluetooth]::BeginSetConnected($Address, $Connect, $DisplayName)
+}
+
+function Receive-BluetoothResult {
+    Initialize-AudioTypes
+    [WinAudioToggle.Bluetooth]::TakeResultMessage()
+}
+
+function Hide-OwnConsoleWindow {
+    Initialize-AudioTypes
+    [WinAudioToggle.Native]::HideOwnConsole()
 }
 
 function Show-AudioOsd {

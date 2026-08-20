@@ -60,6 +60,7 @@ if ($Uninstall) {
     }
     Get-ChildItem -LiteralPath $desktopPath -Filter '*.lnk' -ErrorAction SilentlyContinue |
         Where-Object { $_.BaseName -in @('Mute Microphone', 'Switch Audio Output',
+                                         'Audio Tray (background)',
                                          'Sound Devices (Playback)', 'Sound Devices (Recording)') } |
         ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force; Write-Host "Removed $($_.Name)" }
 
@@ -158,6 +159,18 @@ if (-not $NativeOnly) {
         -Icon (Get-IconPath 'icon2.ico') `
         -Hotkey $OutputHotkey `
         -Description 'Cycle the default audio output device'
+
+    # The resident tray version, for machines that allow a background process.
+    # It manages its own autostart from its right-click menu.
+    $trayScript = Join-Path (Join-Path $repoRoot 'tray') 'AudioTray.ps1'
+    if (Test-Path -LiteralPath $trayScript) {
+        New-AppShortcut -Name 'Audio Tray (background)' `
+            -Target $powershell `
+            -Arguments "$common `"$trayScript`"" `
+            -WorkingDirectory (Split-Path -Parent $trayScript) `
+            -Icon (Get-IconPath 'mic-on.ico') `
+            -Description 'Resident tray icons for microphone and audio output'
+    }
 }
 
 Write-Host ''

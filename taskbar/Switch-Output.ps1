@@ -50,31 +50,7 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-. (Join-Path $PSScriptRoot 'AudioControl.ps1')
-
-function Get-PreferredOrder {
-    <#
-        Resolves outputs.txt into an ordered list of live devices. Returns an
-        empty array when the file is absent or matches fewer than two devices,
-        which tells the caller to fall back to the full list.
-    #>
-    param([Parameter(Mandatory = $true)]$Devices)
-
-    $path = Join-Path $PSScriptRoot 'outputs.txt'
-    if (-not (Test-Path -LiteralPath $path)) { return @() }
-
-    $ordered = @()
-    foreach ($line in Get-Content -LiteralPath $path) {
-        $pattern = $line.Trim()
-        if (-not $pattern -or $pattern.StartsWith('#')) { continue }
-
-        $match = $Devices | Where-Object { $_.Name -like "*$pattern*" } | Select-Object -First 1
-        if ($match -and ($ordered -notcontains $match)) { $ordered += $match }
-    }
-
-    if ($ordered.Count -lt 2) { return @() }
-    return $ordered
-}
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib\AudioControl.ps1')
 
 try {
     $devices = @(Get-AudioDeviceList)
@@ -107,7 +83,7 @@ try {
         }
     }
     else {
-        $rotation = @(Get-PreferredOrder -Devices $devices)
+        $rotation = @(Get-OutputRotation -Devices $devices -ConfigDirectory $PSScriptRoot)
         if ($rotation.Count -eq 0) { $rotation = @($devices | Sort-Object Name) }
 
         if ($rotation.Count -eq 1) {

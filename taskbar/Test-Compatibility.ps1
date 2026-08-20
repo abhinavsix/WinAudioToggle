@@ -120,7 +120,7 @@ Write-Host 'Windows audio APIs' -ForegroundColor White
 
 if ($canCompile) {
     try {
-        . (Join-Path $PSScriptRoot 'AudioControl.ps1')
+        . (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib\AudioControl.ps1')
         Initialize-AudioTypes
         Write-Check 'Core Audio interop' 'Pass' 'loaded'
 

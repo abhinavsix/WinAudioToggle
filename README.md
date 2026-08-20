@@ -26,17 +26,21 @@ This guide explains how to set up two PowerShell tray utilities:
 
 # Which version should I use?
 
-The tray tools above are great on a machine you own. On a work laptop they tend to run into two walls, so there is now a second set of tools in the [`taskbar/`](taskbar) folder that avoids both.
+There are three, and the right one depends on how locked down the machine is.
 
-| | Tray tools (original) | **Taskbar tools** (`taskbar/`) | Shortcuts only |
+| | **Audio Tray** (`tray/`) | **Taskbar tools** (`taskbar/`) | Shortcuts only |
 |---|---|---|---|
-| Needs `Install-Module` | Yes, AudioDeviceCmdlets | No | No |
-| Third-party code | Yes | None | None |
-| Background process | Yes, always running | No, runs ~1.5s per click | None |
-| Live tray icon | Yes | No, brief pop-up instead | No |
-| One-click mic mute | Yes | Yes | No, opens a panel |
+| Live tray icons | Yes | No, brief pop-up instead | No |
+| Background process | Yes, resident | No, ~1.5s per click | None |
+| Click to toggle | Yes | Yes | No, opens a panel |
+| Pick a device from a menu | Yes | Via `-Name` | Yes, in the panel |
+| Connect a paired Bluetooth device | Yes | No | Via Windows Settings |
 | Global hotkey | No | Yes | No |
+| Needs `Install-Module` | No | No | No |
+| Third-party code | None | None | None |
 | Works under AppLocker / WDAC | Usually not | Sometimes | Always |
+
+The original tray scripts at the bottom of this README are superseded by `tray/` — same idea, but without the AudioDeviceCmdlets dependency. They are kept for reference.
 
 **On a work PC, start here:**
 
@@ -48,12 +52,64 @@ That is read-only — it installs nothing and changes no device. It tells you wh
 
 ## Why the original tools trip antivirus and corporate policy
 
-Worth understanding, because it explains what the new tools do differently:
+Two separate things caused trouble, and they are worth separating because the fixes are different:
 
 - **`Install-Module AudioDeviceCmdlets` downloads an unsigned compiled DLL from the PowerShell Gallery.** That is the single biggest trigger — SmartScreen, Defender and AppLocker all treat a freshly downloaded unsigned binary as suspect, and most work accounts cannot install modules at all.
 - **`[System.Windows.Forms.Application]::Run()` keeps `powershell.exe` alive forever.** Endpoint security products flag long-running PowerShell processes as a matter of course, and "no background scripts" policies are aimed at exactly this shape of thing.
 
-The taskbar tools fix both. They call the Core Audio API that is already part of Windows, so there is nothing to download and nothing third-party involved. And they do one thing and exit, so no process is left resident.
+Every tool here fixes the first problem: they call the Core Audio API that is already part of Windows, so there is nothing to download and nothing third-party involved.
+
+Only the taskbar tools fix the second, by exiting after each action. **Audio Tray is a resident process by design** — that is what a live tray icon requires — so on a machine whose policy forbids background scripts, use the taskbar tools instead. There is no way to have both.
+
+---
+
+# Audio Tray
+
+Live tray icons, in [`tray/`](tray). Two icons appear in the notification area and stay in step with whatever Windows is doing — including changes you make in the volume mixer, from a headset button, or by unplugging a dock.
+
+**Microphone icon**
+
+- **Left click** — toggle mute. The icon switches between `mic-on.ico` and `mic-off.ico`.
+- **Right click** — mute/unmute, pick which input device is the default, quit.
+
+**Output icon**
+
+- **Left click** — cycle to the next output device.
+- **Right click** — pick an output directly, connect a paired Bluetooth device, open the Windows sound panel, toggle **Start with Windows**, quit.
+
+## Running it
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tray\AudioTray.ps1
+```
+
+The console window hides itself once it starts, and only when the script owns that window — launching it from an existing prompt leaves your prompt alone. Pass `-KeepConsole` to keep it visible while testing.
+
+To start it at login, use **Start with Windows** in the output icon's right-click menu. That writes a shortcut into your own Startup folder: nothing machine-wide, no admin, no registry Run key. Untick it to remove.
+
+Launching it twice is harmless — the second copy notices the first and exits rather than adding a duplicate pair of icons.
+
+## Connecting a Bluetooth device
+
+The output icon's **Bluetooth** submenu lists devices already paired with this PC, marking the ones currently connected. Click one to connect it; click a connected one to disconnect.
+
+Two limits worth knowing up front:
+
+- **Pairing is not included** — only connecting things already paired. Pairing needs a trust prompt and belongs in Windows Settings, where you have presumably already done it.
+- **This uses the classic Bluetooth audio profiles** (A2DP and hands-free), which is what ordinary headsets and speakers use. A device that only speaks Bluetooth LE Audio will be listed but may not connect this way.
+
+Connecting can take several seconds while the radio negotiates. That work happens on a background thread so the tray stays responsive, and a notification tells you how it went. If the device is off or out of range you get "did not respond" rather than a silent failure.
+
+## Choosing which outputs it cycles
+
+Left-clicking the output icon walks through your devices in order. A docked laptop often exposes five when you only use two, so the same `outputs.txt` the taskbar tools use applies here — see [Cycling only the outputs you care about](#cycling-only-the-outputs-you-care-about). Put it in the repository root to share one file between both tools.
+
+The icon alternates between `icon1.ico` and `icon2.ico` along that cycle order, so the two devices you actually swap between look different at a glance.
+
+## Notes
+
+- **It polls once a second** rather than subscribing to device-change events. That is a deliberate trade: a few API calls per second is negligible, and it avoids COM callbacks arriving on a foreign thread, which is a rich source of crashes in a script-hosted app. Your own clicks repaint the icon immediately, so only external changes can lag, and only briefly.
+- **Transient errors do not kill it.** Windows occasionally refuses these calls while devices are being re-enumerated; the tray absorbs that and only complains if the state stays unreadable.
 
 ---
 
@@ -67,7 +123,7 @@ Everything in this section lives in the [`taskbar/`](taskbar) folder.
 | `Install-Shortcuts.ps1` | Creates the shortcuts you pin to the taskbar. |
 | `Toggle-Mic.ps1` | Mutes/unmutes the microphone and exits. |
 | `Switch-Output.ps1` | Cycles the default output device and exits. |
-| `AudioControl.ps1` | Shared library. Not run directly. |
+| `../lib/AudioControl.ps1` | Shared library, used by the tray tools too. Not run directly. |
 | `Add-CodeSignature.ps1` | Only needed if policy forces `AllSigned`. |
 | `outputs.example.txt` | Optional — narrows which outputs get cycled. |
 
@@ -172,9 +228,11 @@ Also worth knowing, since they need no setup whatsoever:
 
 ---
 
-# Tray Tools (original)
+# Original Tray Tools (superseded)
 
-The always-running tray version. Best on a personal machine — see [Which version should I use?](#which-version-should-i-use) if you are on a work PC.
+Kept for reference. These are the scripts this repository started with; [Audio Tray](#audio-tray) does the same job without needing AudioDeviceCmdlets, and adds device menus and Bluetooth connect.
+
+The two scripts below still work if you have AudioDeviceCmdlets installed and prefer them.
 
 ## Microphone Tray Tool
 

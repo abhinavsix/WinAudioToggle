@@ -42,7 +42,7 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-. (Join-Path $PSScriptRoot 'AudioControl.ps1')
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib\AudioControl.ps1')
 
 try {
     $target = switch ($PSCmdlet.ParameterSetName) {
